@@ -297,7 +297,7 @@ export function MarkdownEditor({
 }
 
 // Internal component that handles wiki link rendering with navigation
-function WikiMarkdown({ content, className }: { content: string; className?: string }) {
+function WikiMarkdown({ content }: { content: string }) {
   const { navigate } = useWikiLinks()
   const processed = processWikiLinks(content)
   return (

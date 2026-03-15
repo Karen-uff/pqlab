@@ -223,7 +223,7 @@ export function MapaConhecimento() {
     [entries.map((e) => e.id).join(','), size.w, size.h],
   )
 
-  const { nodesRef, tick } = useForceSimulation(initNodes, edges, size.w, size.h)
+  const { nodesRef, tick: _tick } = useForceSimulation(initNodes, edges, size.w, size.h)
 
   // Drag state
   const dragRef = useRef<{ nodeId: string; offsetX: number; offsetY: number } | null>(null)
