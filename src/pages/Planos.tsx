@@ -91,7 +91,24 @@ function exportPlanoXLS(p: Plano) {
   XLSX.writeFile(wb, `plano-${p.id}.xlsx`)
 }
 
-function exportPlanoPDF(p: Plano) {
+async function exportPlanoPDF(p: Plano) {
+  // ── Pre-generate all QR codes ────────────────────────────────────────────
+  const qrMap = new Map<string, string>()
+  const allLinks = new Set<string>()
+  for (const url of p.recursos) { if (url) allLinks.add(url) }
+  for (const aula of p.aulas) {
+    for (const r of aula.references) {
+      const link = r.url || (r.doi ? `https://doi.org/${r.doi}` : '')
+      if (link) allLinks.add(link)
+    }
+  }
+  await Promise.all([...allLinks].map(async (link) => {
+    try {
+      const dataUrl = await QRCode.toDataURL(link, { width: 120, margin: 1, color: { dark: '#1e3a5f', light: '#ffffff' } })
+      qrMap.set(link, dataUrl)
+    } catch { /* silent */ }
+  }))
+
   const doc = new jsPDF({ unit: 'mm', format: 'a4' })
   const margin = 20
   const pageWidth = 210
@@ -127,14 +144,12 @@ function exportPlanoPDF(p: Plano) {
 
   // ── Cover page (no background fill) ───────────────────────────────────────
   y = 40
-  // "pqLAB" small centered
   doc.setFont('helvetica', 'bold')
   doc.setFontSize(9)
   doc.setTextColor(130, 90, 200)
   doc.text('pqLAB', pageWidth / 2, y, { align: 'center' })
   y += 7
 
-  // Short ornamental line
   doc.setDrawColor(170, 130, 230)
   doc.setLineWidth(0.5)
   doc.line(pageWidth / 2 - 25, y, pageWidth / 2 + 25, y)
@@ -164,7 +179,7 @@ function exportPlanoPDF(p: Plano) {
   doc.line(margin, y, pageWidth - margin, y)
   y += 10
 
-  // Professors
+  // ── 1. INTEGRANTES ────────────────────────────────────────────────────────
   if (p.professores.length > 0) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
@@ -175,25 +190,10 @@ function exportPlanoPDF(p: Plano) {
     doc.setFontSize(10)
     doc.setTextColor(35, 35, 35)
     doc.text(p.professores.join(', '), margin, y)
-    y += 8
+    y += 10
   }
 
-  // Evaluation
-  if (p.avaliacao) {
-    doc.setFont('helvetica', 'normal')
-    doc.setFontSize(8)
-    doc.setTextColor(140, 140, 140)
-    doc.text('MÉTODO', margin, y)
-    y += 5
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9)
-    doc.setTextColor(35, 35, 35)
-    const evalLines = doc.splitTextToSize(p.avaliacao, contentWidth)
-    doc.text(evalLines, margin, y)
-    y += evalLines.length * 4.5 + 8
-  }
-
-  // Ementa
+  // ── 2. DESCRIÇÃO ─────────────────────────────────────────────────────────
   if (p.ementa) {
     doc.setDrawColor(220, 210, 240)
     doc.setLineWidth(0.2)
@@ -209,6 +209,64 @@ function exportPlanoPDF(p: Plano) {
     doc.setTextColor(60, 60, 60)
     const ementaLines = doc.splitTextToSize(p.ementa, contentWidth)
     doc.text(ementaLines, margin, y)
+    y += ementaLines.length * 4.5 + 8
+  }
+
+  // ── 3. MÉTODO ────────────────────────────────────────────────────────────
+  if (p.avaliacao) {
+    doc.setDrawColor(220, 210, 240)
+    doc.setLineWidth(0.2)
+    doc.line(margin, y, pageWidth - margin, y)
+    y += 8
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(140, 140, 140)
+    doc.text('MÉTODO', margin, y)
+    y += 5
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(9)
+    doc.setTextColor(35, 35, 35)
+    const evalLines = doc.splitTextToSize(p.avaliacao, contentWidth)
+    doc.text(evalLines, margin, y)
+    y += evalLines.length * 4.5 + 8
+  }
+
+  // ── 4. RECURSOS (URLs + QR codes) ────────────────────────────────────────
+  const validRecursos = p.recursos.filter(Boolean)
+  if (validRecursos.length > 0) {
+    doc.setDrawColor(220, 210, 240)
+    doc.setLineWidth(0.2)
+    doc.line(margin, y, pageWidth - margin, y)
+    y += 8
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.setTextColor(140, 140, 140)
+    doc.text('RECURSOS', margin, y)
+    y += 6
+
+    const qrSize = 22
+    const qrGap = 4
+    const textColWidth = contentWidth - qrSize - qrGap
+
+    for (const url of validRecursos) {
+      const qrDataUrl = qrMap.get(url)
+      const rowHeight = qrSize + 2
+      if (y + rowHeight > 270) break // avoid overflow on cover; rest appear in lesson pages
+
+      // URL label
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(7.5)
+      doc.setTextColor(30, 80, 200)
+      const urlLines = doc.splitTextToSize(url, textColWidth - 2)
+      doc.text(urlLines.slice(0, 3), margin, y + 4)
+
+      // QR image
+      if (qrDataUrl) {
+        doc.addImage(qrDataUrl, 'PNG', pageWidth - margin - qrSize, y - 2, qrSize, qrSize)
+      }
+
+      y += rowHeight + 3
+    }
   }
 
   // ── Lesson plan pages ─────────────────────────────────────────────────────
@@ -227,7 +285,6 @@ function exportPlanoPDF(p: Plano) {
         const modulo = p.modulos.find((m) => m.id === aula.moduleId)
         if (modulo) {
           ensureSpace(10)
-          // Small "MÓDULO" tag (stroke box, no fill)
           const tagLabel = 'MÓDULO'
           doc.setFont('helvetica', 'bold')
           doc.setFontSize(6)
@@ -237,7 +294,6 @@ function exportPlanoPDF(p: Plano) {
           doc.setLineWidth(0.3)
           doc.roundedRect(margin, y - 3.8, tagW, 5, 0.8, 0.8, 'S')
           doc.text(tagLabel, margin + 1.75, y - 0.3)
-          // Module title
           doc.setFont('helvetica', 'bold')
           doc.setFontSize(8.5)
           doc.setTextColor(60, 30, 140)
@@ -292,10 +348,16 @@ function exportPlanoPDF(p: Plano) {
       return xStart + tw + 2
     }
 
-    if (mandatory.length > 0) {
+    // Helper: draw one ref group (text) and return list of {link} for QR row
+    function drawRefGroup(
+      refs: PlanoRef[],
+      tagLabel: string,
+      color: [number, number, number],
+    ): string[] {
+      if (refs.length === 0) return []
       ensureSpace(6)
-      const textX = drawRefTag('Leituras', [30, 80, 200], margin + 3, y)
-      const refText = mandatory.map((r) => {
+      const textX = drawRefTag(tagLabel, color, margin + 3, y)
+      const refText = refs.map((r) => {
         const link = r.url || (r.doi ? `doi.org/${r.doi}` : '')
         return r.title + (r.year ? ` (${r.year})` : '') + (link ? ` — ${link}` : '')
       }).join('; ')
@@ -303,24 +365,41 @@ function exportPlanoPDF(p: Plano) {
       ensureSpace(lines.length * 4)
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(7.5)
-      doc.setTextColor(30, 80, 200)
+      doc.setTextColor(...color)
       doc.text(lines, textX, y)
       y += lines.length * 4 + 1
+      return refs.map((r) => r.url || (r.doi ? `https://doi.org/${r.doi}` : '')).filter(Boolean)
     }
-    if (complementary.length > 0) {
-      ensureSpace(6)
-      const textX = drawRefTag('Compl.', [180, 90, 20], margin + 3, y)
-      const refText = complementary.map((r) => {
-        const link = r.url || (r.doi ? `doi.org/${r.doi}` : '')
-        return r.title + (r.year ? ` (${r.year})` : '') + (link ? ` — ${link}` : '')
-      }).join('; ')
-      const lines = doc.splitTextToSize(refText, contentWidth - (textX - margin))
-      ensureSpace(lines.length * 4)
-      doc.setFont('helvetica', 'normal')
-      doc.setFontSize(7.5)
-      doc.setTextColor(180, 90, 20)
-      doc.text(lines, textX, y)
-      y += lines.length * 4 + 1
+
+    const mandatoryLinks = drawRefGroup(mandatory, 'Leituras', [30, 80, 200])
+    const complementaryLinks = drawRefGroup(complementary, 'Compl.', [180, 90, 20])
+
+    // QR code row for all refs with links in this lesson
+    const allRefLinks = [...mandatoryLinks, ...complementaryLinks]
+    if (allRefLinks.length > 0) {
+      const qrSize = 16
+      const qrGap = 3
+      const maxPerRow = Math.floor(contentWidth / (qrSize + qrGap))
+      const chunks: string[][] = []
+      for (let i = 0; i < allRefLinks.length; i += maxPerRow) {
+        chunks.push(allRefLinks.slice(i, i + maxPerRow))
+      }
+      for (const chunk of chunks) {
+        ensureSpace(qrSize + 6)
+        chunk.forEach((link, idx) => {
+          const qrDataUrl = qrMap.get(link)
+          if (!qrDataUrl) return
+          const xPos = margin + idx * (qrSize + qrGap)
+          doc.addImage(qrDataUrl, 'PNG', xPos, y, qrSize, qrSize)
+          // tiny label below QR
+          doc.setFont('helvetica', 'normal')
+          doc.setFontSize(5)
+          doc.setTextColor(100, 100, 100)
+          const shortLink = link.replace(/^https?:\/\//, '').slice(0, 30)
+          doc.text(shortLink, xPos, y + qrSize + 2.5)
+        })
+        y += qrSize + 6
+      }
     }
 
     y += 2
@@ -851,7 +930,7 @@ function PlanoEditor({ plano, onSave, onCancel }: { plano: Plano; onSave: (p: Pl
           <Button variant="outline" size="sm" onClick={() => exportPlanoXLS(current)}>
             <Table2 className="w-4 h-4" /> XLS
           </Button>
-          <Button variant="outline" size="sm" onClick={() => exportPlanoPDF(current)}>
+          <Button variant="outline" size="sm" onClick={() => { void exportPlanoPDF(current) }}>
             <Download className="w-4 h-4" /> PDF
           </Button>
         </div>
@@ -909,7 +988,7 @@ function PlanoCard({ plano, onEdit, onDelete }: { plano: Plano; onEdit: () => vo
             <button onClick={() => exportPlanoXLS(plano)} title="Exportar XLS" className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors">
               <Table2 className="w-4 h-4" />
             </button>
-            <button onClick={() => exportPlanoPDF(plano)} title="Exportar PDF" className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors">
+            <button onClick={() => { void exportPlanoPDF(plano) }} title="Exportar PDF" className="p-1.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-md transition-colors">
               <Download className="w-4 h-4" />
             </button>
             <button onClick={onEdit} title="Editar" className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded-md transition-colors">
