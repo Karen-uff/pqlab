@@ -29,3 +29,49 @@ conforme interface do useToast hook. Build TypeScript passa sem erros.
 [0191] 2026-03-25 — chore: screenshots módulo Revisões
 Gerados screenshots 08-revisoes.png (listagem) e 08-revisoes-exp.png (Arguição expandida
 com badge de páginas teal visível). Screenshots salvas na pasta /screenshots.
+
+[0192] 2026-03-26 — fix: Planos – links e QR codes ausentes no PDF exportado
+PDF do módulo Planos não exibia a seção de Recursos com Link. Corrigida a função de
+exportação para incluir referências com URL/DOI em seção dedicada após Integrantes,
+Descrição e Método. QR codes gerados via qrcode.toDataURL() inseridos diretamente no
+PDF com jsPDF addImage(). Ordem de seções no PDF: Integrantes → Descrição → Método →
+Recursos.
+
+[0193] 2026-03-26 — fix: Revisões – alinhamento de formulário, busca, PDF sem fundo colorido, badges inline
+Formulário de Novo Parecer: campos Autor(a) e Data agora alinhados na mesma linha
+(hint de Autor movido para placeholder, layout em grid-cols-2). Busca implementada
+para ambos subtipos: Arguição filtra por título/autor/instituição/data; Parecer filtra
+por título/autor/solicitante/data. PDF exportado dos dois subtipos usa cabeçalho sem
+fundo colorido (mesmo padrão de Planos e Fichamentos). Badges de páginas (p. X,
+pp. X–Y) renderizados inline no fluxo do texto sem quebrar parágrafo; presentes
+também no PDF exportado em texto simples.
+
+[0194] 2026-03-27 — feat: modo Canva em Tarefas e Listas e Memorandos
+Ao criar uma lista, o usuário escolhe entre dois tipos numa tela de seleção:
+Lista (comportamento existente com checkboxes/drag) ou Canva (superfície 2D livre
+de 1600×1100 px com grid de pontos). No Canva, cards são arrastados livremente com
+pointer events; posições x/y persistidas em cada item. Pool de tags por canva (criadas
+na barra de tags); cada card recebe apenas as tags que o usuário atribuir via badge
+colorido removível + botão "+" com dropdown. Cards têm título, preview de descrição
+e diálogo de edição completo (título, Markdown + [[wikilinks]], tags). Wikilinks nos
+cards indexados no WikiLinkContext → aparecem no Mapa do Conhecimento. Novos campos
+nos tipos: Lista.kind, Lista.canvaTags, ListaItem.x/y/tags; ListaSimples.kind,
+ListaSimples.canvaTags, ListaSimpleItem.x/y/tags.
+
+[0195] 2026-03-27 — fix: Canva – cards completos com diálogo de edição, tags por card, backlinks
+Cards do Canva reformulados: cabeçalho com título e botões editar/excluir; corpo com
+preview de descrição (texto limpo, máx. 3 linhas); rodapé com tags atribuídas como
+badges removíveis (×) e botão "+" para selecionar tags do pool individualmente (tags
+NÃO são atribuídas automaticamente a todos os cards). Diálogo "Editar card" com
+MarkdownEditor suportando [[wikilinks]] e selector de tags por toggle. Canvas portado
+para Tarefas.tsx (rota /tarefas, módulo ativo) — Listas.tsx era código morto não
+montado. CanvasSimpleCard em ListasSimples.tsx atualizado com o mesmo padrão.
+
+[0196] 2026-03-27 — chore: screenshots do modo Canva + history.log
+Gerados 5 screenshots do modo Canva via Playwright (demo mode):
+  canva-01-seletor-tipo.png  — diálogo de seleção Lista vs Canva
+  canva-02-novo-nome.png     — etapa de título do novo canva
+  canva-03-canvas-cards.png  — superfície 2D com cards, tags e descrições
+  canva-04-editar-card.png   — diálogo "Editar card" com Markdown e tags
+  canva-05-listas-seletor.png — seletor de tipo no módulo Listas e Memorandos
+Atualizado history.log com entradas [0192]–[0196].
