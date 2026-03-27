@@ -242,53 +242,167 @@ function toPlain(md: string): string {
   return md.replace(/[#*_~`>]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').trim()
 }
 
-// Render a text block in jsPDF with page refs highlighted in teal bold.
-// Returns the new y position after the last line.
-function renderTextWithPageTags(
-  doc: jsPDF, text: string,
-  x: number, y: number, maxWidth: number, lineHeightMm: number,
-  pageHeight: number, margin: number
-): number {
-  if (!text.trim()) return y
-  const plain = toPlain(text)
-  const fontSize = doc.getFontSize()
-  const sf = (doc as unknown as { internal: { scaleFactor: number } }).internal.scaleFactor
-  const getW = (t: string) => doc.getStringUnitWidth(t) * fontSize / sf
+// ─── Markdown-aware PDF renderer ─────────────────────────────────────────
 
-  // Tokenize into segments: {value, isTag}
-  type Tok = { value: string; isTag: boolean }
-  const tokens: Tok[] = []
-  const re = /\b(pp?\.\s*\d+(?:[–\-]\d+)?)/g
+type InlineSeg = { text: string; bold: boolean; italic: boolean; isPageRef: boolean }
+
+/** Tokenizes inline Markdown into styled segments (bold, italic, page refs). */
+function parseInlineMD(text: string): InlineSeg[] {
+  const segs: InlineSeg[] = []
+  const re = /\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|_(.+?)_|\b(pp?\.\s*\d+(?:[–\-]\d+)?)/g
   let last = 0; let m: RegExpExecArray | null
-  while ((m = re.exec(plain)) !== null) {
-    if (m.index > last) tokens.push({ value: plain.slice(last, m.index), isTag: false })
-    tokens.push({ value: m[1], isTag: true })
+  while ((m = re.exec(text)) !== null) {
+    if (m.index > last) segs.push({ text: text.slice(last, m.index), bold: false, italic: false, isPageRef: false })
+    if (m[1] !== undefined)      segs.push({ text: m[1], bold: true,  italic: true,  isPageRef: false })
+    else if (m[2] !== undefined) segs.push({ text: m[2], bold: true,  italic: false, isPageRef: false })
+    else if (m[3] !== undefined) segs.push({ text: m[3], bold: false, italic: true,  isPageRef: false })
+    else if (m[4] !== undefined) segs.push({ text: m[4], bold: false, italic: true,  isPageRef: false })
+    else                         segs.push({ text: m[5], bold: true,  italic: false, isPageRef: true  })
     last = m.index + m[0].length
   }
-  if (last < plain.length) tokens.push({ value: plain.slice(last), isTag: false })
+  if (last < text.length) segs.push({ text: text.slice(last), bold: false, italic: false, isPageRef: false })
+  return segs
+}
 
-  // Word-wrap and render
+function applySegFont(doc: jsPDF, seg: InlineSeg) {
+  if (seg.isPageRef) {
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(13, 148, 136)
+  } else if (seg.bold && seg.italic) {
+    doc.setFont('helvetica', 'bolditalic'); doc.setTextColor(30, 30, 30)
+  } else if (seg.bold) {
+    doc.setFont('helvetica', 'bold'); doc.setTextColor(30, 30, 30)
+  } else if (seg.italic) {
+    doc.setFont('helvetica', 'italic'); doc.setTextColor(60, 60, 60)
+  } else {
+    doc.setFont('helvetica', 'normal'); doc.setTextColor(50, 50, 50)
+  }
+}
+
+/** Renders inline segments with word-wrap. Returns new y after last line. */
+function renderInlineSegs(
+  doc: jsPDF, segs: InlineSeg[],
+  x: number, y: number, maxWidth: number, lineH: number,
+  pageHeight: number, margin: number
+): number {
+  const sf = (doc as unknown as { internal: { scaleFactor: number } }).internal.scaleFactor
+  const W = (t: string) => doc.getStringUnitWidth(t) * doc.getFontSize() / sf
   let curX = x
-  for (const { value, isTag } of tokens) {
-    const words = value.split(/(\s+)/)
+  for (const seg of segs) {
+    applySegFont(doc, seg)
+    const words = seg.text.split(/(\s+)/)
     for (const word of words) {
       if (!word) continue
-      const w = getW(word)
-      if (word.trim() && curX + w > x + maxWidth + 0.5) {
-        curX = x; y += lineHeightMm
+      const ww = W(word)
+      if (word.trim() && curX + ww > x + maxWidth + 0.1) {
+        curX = x; y += lineH
         if (y > pageHeight - margin) { doc.addPage(); y = margin }
       }
-      if (isTag) {
-        doc.setFont('helvetica', 'bold'); doc.setTextColor(13, 148, 136)
-      } else {
-        doc.setFont('helvetica', 'normal'); doc.setTextColor(50, 50, 50)
-      }
       if (word.trim()) doc.text(word, curX, y)
-      curX += w
+      curX += ww
     }
   }
   doc.setFont('helvetica', 'normal'); doc.setTextColor(50, 50, 50)
-  return y + lineHeightMm
+  return y + lineH
+}
+
+/**
+ * Renders Markdown text into jsPDF with full formatting support:
+ * # H1, ## H2, ### H3, **bold**, *italic*, ***bold+italic***,
+ * - bullets, 1. numbered lists, > blockquotes, --- rules, blank lines.
+ * Page references (p. X, pp. X–Y) are rendered in teal bold.
+ * Returns the new y position.
+ */
+function renderMarkdownToPDF(
+  doc: jsPDF, md: string,
+  x: number, y: number, maxWidth: number, lineH: number,
+  pageHeight: number, margin: number
+): number {
+  if (!md.trim()) return y
+  const sf = (doc as unknown as { internal: { scaleFactor: number } }).internal.scaleFactor
+
+  const checkSpace = (need: number) => {
+    if (y + need > pageHeight - margin) { doc.addPage(); y = margin }
+  }
+
+  for (const raw of md.split('\n')) {
+    const line = raw.trimEnd()
+
+    // Blank line → small gap
+    if (!line.trim()) { y += lineH * 0.5; continue }
+
+    // H1 (# …)
+    if (/^#\s/.test(line)) {
+      checkSpace(10); y += 1.5
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(13); doc.setTextColor(30, 30, 30)
+      const wrapped = doc.splitTextToSize(line.replace(/^#+\s*/, ''), maxWidth)
+      doc.text(wrapped, x, y); y += wrapped.length * 6.5 + 1
+      doc.setFontSize(9); continue
+    }
+    // H2 (## …)
+    if (/^##\s/.test(line)) {
+      checkSpace(8); y += 1
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(30, 30, 30)
+      const wrapped = doc.splitTextToSize(line.replace(/^#+\s*/, ''), maxWidth)
+      doc.text(wrapped, x, y); y += wrapped.length * 5.5 + 0.5
+      doc.setFontSize(9); continue
+    }
+    // H3 (### …)
+    if (/^###\s/.test(line)) {
+      checkSpace(7)
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(50, 50, 50)
+      const wrapped = doc.splitTextToSize(line.replace(/^#+\s*/, ''), maxWidth)
+      doc.text(wrapped, x, y); y += wrapped.length * 5 + 0.5
+      doc.setFontSize(9); continue
+    }
+
+    // Horizontal rule (--- / *** / ___)
+    if (/^[-*_]{3,}$/.test(line.trim())) {
+      checkSpace(5)
+      doc.setDrawColor(200, 200, 200); doc.setLineWidth(0.3)
+      doc.line(x, y - 1, x + maxWidth, y - 1); y += 3; continue
+    }
+
+    // Bullet list (- / * / +)
+    const bulletM = line.match(/^[\-\*\+]\s+(.*)/)
+    if (bulletM) {
+      checkSpace(6); doc.setFontSize(9)
+      const pw = doc.getStringUnitWidth('• ') * 9 / sf
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(50, 50, 50)
+      doc.text('•', x + 1, y)
+      y = renderInlineSegs(doc, parseInlineMD(bulletM[1]), x + 1 + pw, y, maxWidth - 1 - pw, lineH, pageHeight, margin)
+      continue
+    }
+
+    // Numbered list (1. 2. …)
+    const numM = line.match(/^(\d+)\.\s+(.*)/)
+    if (numM) {
+      checkSpace(6); doc.setFontSize(9)
+      const prefix = numM[1] + '. '
+      const pw = doc.getStringUnitWidth(prefix) * 9 / sf
+      doc.setFont('helvetica', 'normal'); doc.setTextColor(50, 50, 50)
+      doc.text(prefix, x, y)
+      y = renderInlineSegs(doc, parseInlineMD(numM[2]), x + pw, y, maxWidth - pw, lineH, pageHeight, margin)
+      continue
+    }
+
+    // Blockquote (> …)
+    if (line.startsWith('> ')) {
+      checkSpace(6); doc.setFontSize(9)
+      doc.setDrawColor(180, 180, 180); doc.setLineWidth(0.8)
+      doc.line(x + 2, y - lineH + 1, x + 2, y + 0.8)
+      const segs = parseInlineMD(line.slice(2))
+      segs.forEach((s) => { if (!s.isPageRef && !s.bold) s.italic = true })
+      y = renderInlineSegs(doc, segs, x + 6, y, maxWidth - 6, lineH, pageHeight, margin)
+      continue
+    }
+
+    // Regular paragraph (with inline formatting)
+    checkSpace(6); doc.setFontSize(9)
+    y = renderInlineSegs(doc, parseInlineMD(line), x, y, maxWidth, lineH, pageHeight, margin)
+  }
+
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(9); doc.setTextColor(50, 50, 50)
+  return y
 }
 
 function exportArguicaoMarkdown(a: Arguicao) {
@@ -411,7 +525,7 @@ function exportArguicaoPDF(a: Arguicao) {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(13, 148, 136)
     doc.text(title.toUpperCase(), margin, y); y += 5
     doc.setFontSize(9)
-    y = renderTextWithPageTags(doc, content, margin, y, contentWidth, 4.5, pageHeight, margin)
+    y = renderMarkdownToPDF(doc, content, margin, y, contentWidth, 4.5, pageHeight, margin)
     y += 4
   }
 
@@ -479,7 +593,7 @@ function exportParecerPDF(p: Parecer) {
   doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(13, 148, 136)
   doc.text('PARECER', margin, y); y += 5
   doc.setFontSize(9)
-  renderTextWithPageTags(doc, p.parecer, margin, y, contentWidth, 4.5, pageHeight, margin)
+  y = renderMarkdownToPDF(doc, p.parecer, margin, y, contentWidth, 4.5, pageHeight, margin)
 
   const total = doc.getNumberOfPages()
   for (let i = 1; i <= total; i++) {
