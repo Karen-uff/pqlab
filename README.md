@@ -70,7 +70,16 @@ Cadastre planos de trabalho ou programas de disciplinas, associando a descriçã
 ![pqLAB](./screenshots/06-planos-exp.png)
 
 
-### 7. Visualização em Mapa
+### 7. Submissões
+
+Gerencie o ciclo de vida dos artigos submetidos a periódicos e congressos em um quadro Kanban com cinco colunas: Purgatório, Resumo ou Draft, Queue, Em Avaliação e Aguardando Publicação. Cada submissão pode ter autores, resumo e um log cronológico de eventos (submissões, rodadas de revisão, aceites e recusas) registrado na forma de uma linha do tempo.
+
+![pqLAB](./screenshots/09-submissoes.png)
+
+![pqLAB](./screenshots/09-submissoes-exp.png)
+
+
+### 8. Visualização em Mapa
 
 Acompanhe e visualize as associações construídas a partir de [[links internos]] nas suas anotações de diário de campo, tarefas, fichamentos e outros módulos em um mapa mental interativo, produzido a partir de um grafo *force-directed* gerado automaticamente com os dados providos pelos módulos.
 
@@ -79,13 +88,7 @@ Acompanhe e visualize as associações construídas a partir de [[links internos
 ![pqLAB](./screenshots/07-mapa-exp.png)
 
 
-### 8. Submissões
 
-Gerencie o ciclo de vida dos artigos submetidos a periódicos e congressos em um quadro Kanban com cinco colunas: Purgatório, Resumo ou Draft, Queue, Em Avaliação e Aguardando Publicação. Cada submissão pode ter autores, resumo e um log cronológico de eventos (submissões, rodadas de revisão, aceites e recusas) registrado na forma de uma linha do tempo.
-
-![pqLAB](./screenshots/09-submissoes.png)
-
-![pqLAB](./screenshots/09-submissoes-exp.png)
 
 
 ---
