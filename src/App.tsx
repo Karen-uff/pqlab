@@ -2,6 +2,7 @@ import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { WikiLinkProvider } from '@/contexts/WikiLinkContext'
+import { DarkModeProvider } from '@/contexts/DarkModeContext'
 import { AppLayout } from '@/components/layout/AppLayout'
 import { ProtectedRoute } from '@/components/layout/ProtectedRoute'
 import { Login } from '@/pages/Login'
@@ -23,6 +24,7 @@ const queryClient = new QueryClient({
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <DarkModeProvider>
       <AuthProvider>
         <HashRouter>
           <WikiLinkProvider>
@@ -51,6 +53,7 @@ export default function App() {
           </WikiLinkProvider>
         </HashRouter>
       </AuthProvider>
+      </DarkModeProvider>
     </QueryClientProvider>
   )
 }

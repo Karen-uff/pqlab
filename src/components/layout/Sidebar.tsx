@@ -1,26 +1,27 @@
-import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   BookOpen, Bookmark, FileText, CalendarDays, List, CheckSquare,
-  LogOut, Menu, X, GraduationCap, Network, ClipboardCheck, Kanban,
+  LogOut, X, GraduationCap, Network, ClipboardCheck, Kanban, Sun, Moon,
 } from 'lucide-react'
 import { useAuth } from '@/contexts/AuthContext'
+import { useDarkMode } from '@/contexts/DarkModeContext'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { cn } from '@/lib/utils'
 
 const navItems = [
-  { to: '/diario',      label: 'Diário de Campo',    icon: BookOpen,     color: 'text-amber-600',  bg: 'bg-amber-50',  activeBg: 'bg-amber-100' },
-  { to: '/listas',      label: 'Listas e Memorandos', icon: List,         color: 'text-orange-600', bg: 'bg-orange-50', activeBg: 'bg-orange-100' },
-  { to: '/tarefas',     label: 'Tarefas',             icon: CheckSquare,  color: 'text-pink-600',   bg: 'bg-pink-50',   activeBg: 'bg-pink-100' },
-  { to: '/bookmarks',   label: 'Favoritos',           icon: Bookmark,     color: 'text-blue-600',   bg: 'bg-blue-50',   activeBg: 'bg-blue-100' },
-  { to: '/fichamentos', label: 'Fichamentos',          icon: FileText,       color: 'text-green-600',  bg: 'bg-green-50',  activeBg: 'bg-green-100' },
-  { to: '/revisoes',    label: 'Revisões',             icon: ClipboardCheck, color: 'text-teal-600',   bg: 'bg-teal-50',   activeBg: 'bg-teal-100' },
-  { to: '/planos',      label: 'Planos',               icon: CalendarDays,   color: 'text-purple-600', bg: 'bg-purple-50', activeBg: 'bg-purple-100' },
-  { to: '/submissoes',  label: 'Submissões',           icon: Kanban,         color: 'text-sky-600',    bg: 'bg-sky-50',    activeBg: 'bg-sky-100' },
+  { to: '/diario',      label: 'Diário de Campo',     icon: BookOpen,       color: 'text-amber-600',  bg: 'bg-amber-50',  activeBg: 'bg-amber-100' },
+  { to: '/listas',      label: 'Listas e Memorandos', icon: List,           color: 'text-orange-600', bg: 'bg-orange-50', activeBg: 'bg-orange-100' },
+  { to: '/tarefas',     label: 'Tarefas',              icon: CheckSquare,    color: 'text-pink-600',   bg: 'bg-pink-50',   activeBg: 'bg-pink-100' },
+  { to: '/bookmarks',   label: 'Favoritos',            icon: Bookmark,       color: 'text-blue-600',   bg: 'bg-blue-50',   activeBg: 'bg-blue-100' },
+  { to: '/fichamentos', label: 'Fichamentos',           icon: FileText,       color: 'text-green-600',  bg: 'bg-green-50',  activeBg: 'bg-green-100' },
+  { to: '/revisoes',    label: 'Revisões',              icon: ClipboardCheck, color: 'text-teal-600',   bg: 'bg-teal-50',   activeBg: 'bg-teal-100' },
+  { to: '/planos',      label: 'Planos',                icon: CalendarDays,   color: 'text-purple-600', bg: 'bg-purple-50', activeBg: 'bg-purple-100' },
+  { to: '/submissoes',  label: 'Submissões',            icon: Kanban,         color: 'text-sky-600',    bg: 'bg-sky-50',    activeBg: 'bg-sky-100' },
 ]
 
 function SidebarContent({ onClose }: { onClose?: () => void }) {
   const { user, signOut, isDemoMode } = useAuth()
+  const { isDark, toggle } = useDarkMode()
   const navigate = useNavigate()
 
   const displayName = user?.displayName ?? user?.email ?? 'Usuário'
@@ -34,7 +35,7 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-white border-r border-gray-200">
+    <div className="flex flex-col h-full bg-white border-r border-gray-200 sidebar-panel">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-5 border-b border-gray-100">
         <div className="flex items-center gap-2.5">
@@ -117,8 +118,20 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
         </NavLink>
       </nav>
 
-      {/* User area */}
-      <div className="px-3 py-3 border-t border-gray-100">
+      {/* Footer */}
+      <div className="px-3 py-3 border-t border-gray-100 space-y-1">
+        {/* Dark mode toggle */}
+        <button
+          onClick={toggle}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 hover:text-gray-900 transition-colors"
+        >
+          <div className="w-7 h-7 rounded-md bg-gray-100 flex items-center justify-center flex-shrink-0">
+            {isDark ? <Sun className="w-4 h-4 text-gray-500" /> : <Moon className="w-4 h-4 text-gray-500" />}
+          </div>
+          <span>{isDark ? 'Light mode' : 'Dark mode'}</span>
+        </button>
+
+        {/* User area */}
         <div className="flex items-center gap-3 px-2 py-2 rounded-lg">
           <Avatar className="h-8 w-8 flex-shrink-0">
             {avatarUrl && <AvatarImage src={avatarUrl} alt={displayName} />}
@@ -138,9 +151,10 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
   )
 }
 
-export function Sidebar() {
-  const [mobileOpen, setMobileOpen] = useState(false)
-
+export function Sidebar({ mobileOpen, onMobileClose }: {
+  mobileOpen: boolean
+  onMobileClose: () => void
+}) {
   return (
     <>
       {/* Desktop sidebar */}
@@ -148,20 +162,12 @@ export function Sidebar() {
         <SidebarContent />
       </div>
 
-      {/* Mobile hamburger */}
-      <button
-        className="lg:hidden fixed top-4 left-4 z-50 p-2 bg-white border border-gray-200 rounded-lg shadow-sm"
-        onClick={() => setMobileOpen(true)}
-      >
-        <Menu className="w-5 h-5 text-gray-600" />
-      </button>
-
       {/* Mobile drawer */}
       {mobileOpen && (
         <>
-          <div className="lg:hidden fixed inset-0 z-40 bg-black/40" onClick={() => setMobileOpen(false)} />
+          <div className="lg:hidden fixed inset-0 z-40 bg-black/40" onClick={onMobileClose} />
           <div className="lg:hidden fixed inset-y-0 left-0 z-50 w-64">
-            <SidebarContent onClose={() => setMobileOpen(false)} />
+            <SidebarContent onClose={onMobileClose} />
           </div>
         </>
       )}
