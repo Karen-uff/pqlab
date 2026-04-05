@@ -1259,12 +1259,23 @@ export function Revisoes() {
 
   useEffect(() => {
     if (isDemoMode) return
-    loadRevisoes().then(setRevisoes).catch(() => toast({ title: 'Erro ao carregar revisões', variant: 'destructive' })).finally(() => setLoading(false))
+    loadRevisoes()
+      .then(setRevisoes)
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[Revisoes] loadRevisoes falhou:', err)
+        toast({ title: `Erro ao carregar revisões: ${msg}`, variant: 'destructive' })
+      })
+      .finally(() => setLoading(false))
   }, [isDemoMode])
 
   const handleSave = useCallback(async (r: Revisao) => {
     if (!isDemoMode) {
-      try { await saveRevisao(r) } catch { toast({ title: 'Erro ao salvar', variant: 'destructive' }); return }
+      try { await saveRevisao(r) } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[Revisoes] saveRevisao falhou:', err)
+        toast({ title: `Erro ao salvar: ${msg}`, variant: 'destructive' }); return
+      }
     }
     setRevisoes((prev) => {
       const idx = prev.findIndex((x) => x.id === r.id)
@@ -1276,7 +1287,11 @@ export function Revisoes() {
 
   const handleDelete = useCallback(async (id: string) => {
     if (!isDemoMode) {
-      try { await deleteRevisao(id) } catch { toast({ title: 'Erro ao excluir', variant: 'destructive' }); return }
+      try { await deleteRevisao(id) } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err)
+        console.error('[Revisoes] deleteRevisao falhou:', err)
+        toast({ title: `Erro ao excluir: ${msg}`, variant: 'destructive' }); return
+      }
     }
     setRevisoes((prev) => prev.filter((r) => r.id !== id))
     toast({ title: 'Revisão excluída' })

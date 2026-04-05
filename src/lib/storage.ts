@@ -68,7 +68,18 @@ async function readYaml<T>(filePath: string): Promise<T> {
 
 async function writeYaml<T extends object>(filePath: string, data: T, msg: string): Promise<void> {
   const text = yamlDump(data, { indent: 2, lineWidth: -1, skipInvalid: true })
-  const sha = shaCache.get(filePath)
+  let sha = shaCache.get(filePath)
+  if (!sha) {
+    // SHA not in cache (e.g. page was reloaded) — check if file already exists on GitHub.
+    // Without the correct SHA, GitHub returns 422 for updates.
+    try {
+      const existing = await readFile(cfg(), filePath)
+      sha = existing.sha
+      shaCache.set(filePath, sha)
+    } catch {
+      // File doesn't exist yet — create mode (sha stays undefined)
+    }
+  }
   const result = await writeTextFile(cfg(), filePath, text, msg, sha)
   shaCache.set(filePath, result.content.sha)
 }
@@ -316,7 +327,17 @@ export async function deleteListaSimples(id: string): Promise<void> {
 
 export async function loadRevisoes(): Promise<Revisao[]> {
   const files = await listYamls('data/revisoes')
+  if (files.length === 0) return []
   const results = await Promise.allSettled(files.map((f) => readYaml<Revisao>(f)))
+  const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+  if (failed.length > 0) {
+    console.error(`[loadRevisoes] ${failed.length}/${files.length} arquivo(s) falharam ao carregar:`,
+      failed.map((r) => r.reason))
+  }
+  if (failed.length === files.length) {
+    // Every single file failed — surface the first error instead of returning empty silently
+    throw failed[0].reason
+  }
   return results
     .filter((r): r is PromiseFulfilledResult<Revisao> => r.status === 'fulfilled' && r.value != null)
     .map((r) => r.value)
